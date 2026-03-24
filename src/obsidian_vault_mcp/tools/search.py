@@ -6,10 +6,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import frontmatter
-
 from .. import config
 from ..vault import resolve_vault_path
+from .read import _extract_frontmatter
 
 logger = logging.getLogger(__name__)
 
@@ -125,19 +124,6 @@ def _search_python(
     return matches
 
 
-def _get_frontmatter_excerpt(file_path: Path, max_keys: int = 3) -> dict | None:
-    """Read frontmatter from a file, returning first N key-value pairs."""
-    try:
-        content = file_path.read_text(encoding="utf-8")
-        post = frontmatter.loads(content)
-        if not post.metadata:
-            return None
-        keys = list(post.metadata.keys())[:max_keys]
-        return {k: post.metadata[k] for k in keys}
-    except Exception:
-        return None
-
-
 def vault_search(
     query: str,
     path_prefix: str | None = None,
@@ -162,7 +148,13 @@ def vault_search(
 
         for match in matches:
             file_full_path = config.VAULT_PATH / match["path"]
-            match["frontmatter_excerpt"] = _get_frontmatter_excerpt(file_full_path)
+            try:
+                content = file_full_path.read_text(encoding="utf-8")
+                fm = _extract_frontmatter(content)
+                if fm:
+                    match["frontmatter"] = fm
+            except Exception:
+                pass
 
         truncated = len(matches) >= max_results
 
@@ -178,42 +170,3 @@ def vault_search(
         return json.dumps({"error": str(e)})
 
 
-def vault_search_frontmatter(
-    field: str,
-    value: str = "",
-    match_type: str = "exact",
-    path_prefix: str | None = None,
-    max_results: int = 20,
-) -> str:
-    """Search vault files by frontmatter field values using the in-memory index."""
-    from ..server import frontmatter_index
-
-    try:
-        results = frontmatter_index.search_by_field(
-            field=field,
-            value=value,
-            match_type=match_type,
-            path_prefix=path_prefix,
-        )
-
-        formatted = []
-        for item in results[:max_results]:
-            path = item["path"]
-            fm = item["frontmatter"]
-            title = fm.get("title", Path(path).stem)
-            formatted.append({
-                "path": path,
-                "frontmatter": fm,
-                "title": title,
-            })
-
-        truncated = len(results) > max_results
-
-        return json.dumps({
-            "results": formatted,
-            "total": len(formatted),
-            "truncated": truncated,
-        })
-    except Exception as e:
-        logger.error(f"vault_search_frontmatter error: {e}")
-        return json.dumps({"error": str(e)})

@@ -2,33 +2,39 @@
 
 import json
 import logging
-
-import frontmatter
+import re
 
 from ..vault import resolve_vault_path, read_file
 
 logger = logging.getLogger(__name__)
 
+# Regex to extract YAML frontmatter block (between --- markers at file start)
+_FM_PATTERN = re.compile(r"\A---\r?\n(.*?\r?\n)---\r?\n", re.DOTALL)
+
+
+def _extract_frontmatter(content: str) -> str | None:
+    """Extract raw YAML frontmatter text from file content.
+
+    Returns the raw YAML string (without --- delimiters), or None if no frontmatter.
+    Never parses or reformats — returns exactly what's in the file.
+    """
+    match = _FM_PATTERN.match(content)
+    if not match:
+        return None
+    return match.group(1).rstrip("\n")
+
 
 def vault_read(path: str) -> str:
-    """Read a file from the vault, returning content, metadata, and parsed frontmatter."""
+    """Read a file from the vault. Returns raw content, file metadata, and parsed frontmatter."""
     try:
-        resolved = resolve_vault_path(path)
+        resolve_vault_path(path)
         content, metadata = read_file(path)
-
-        fm_data = None
-        try:
-            post = frontmatter.loads(content)
-            if post.metadata:
-                fm_data = post.metadata
-        except Exception:
-            pass
 
         return json.dumps({
             "path": path,
             "content": content,
             "metadata": metadata,
-            "frontmatter": fm_data,
+            "frontmatter": _extract_frontmatter(content),
         })
     except ValueError as e:
         return json.dumps({"error": str(e), "path": path})
@@ -49,18 +55,10 @@ def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
         try:
             content, metadata = read_file(path)
 
-            fm_data = None
-            try:
-                post = frontmatter.loads(content)
-                if post.metadata:
-                    fm_data = post.metadata
-            except Exception:
-                pass
-
             entry = {
                 "path": path,
                 "metadata": metadata,
-                "frontmatter": fm_data,
+                "frontmatter": _extract_frontmatter(content),
             }
             if include_content:
                 entry["content"] = content

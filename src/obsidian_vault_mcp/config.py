@@ -5,10 +5,8 @@ from pathlib import Path
 VAULT_PATH = Path(os.environ.get("VAULT_PATH", os.path.expanduser("~/Obsidian/MyVault")))
 VAULT_MCP_TOKEN = os.environ.get("VAULT_MCP_TOKEN", "")
 VAULT_MCP_PORT = int(os.environ.get("VAULT_MCP_PORT", "8420"))
-
-# OAuth 2.0 client credentials (for Claude app integration)
-VAULT_OAUTH_CLIENT_ID = os.environ.get("VAULT_OAUTH_CLIENT_ID", "vault-mcp-client")
-VAULT_OAUTH_CLIENT_SECRET = os.environ.get("VAULT_OAUTH_CLIENT_SECRET", "")
+VAULT_MCP_HOST = os.environ.get("VAULT_MCP_HOST", "0.0.0.0")
+VAULT_ALLOWED_HOSTS = os.environ.get("VAULT_ALLOWED_HOSTS", "")
 
 # Safety limits
 MAX_CONTENT_SIZE = 1_000_000  # 1MB max write size
@@ -21,9 +19,3 @@ CONTEXT_LINES = 2             # Default lines of context in search results
 # Directories to never expose or modify
 EXCLUDED_DIRS = {".obsidian", ".trash", ".git", ".DS_Store"}
 
-# Frontmatter index refresh interval (seconds)
-FRONTMATTER_INDEX_DEBOUNCE = 5.0
-
-# Rate limiting (requests per minute) -- track in-memory, enforce per-token
-RATE_LIMIT_READ = 100
-RATE_LIMIT_WRITE = 30

@@ -4,49 +4,28 @@ Exposes read/write access to an Obsidian vault over Streamable HTTP.
 Designed to run behind Cloudflare Tunnel for secure remote access.
 """
 
-import json
 import logging
 import sys
-from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from .config import VAULT_MCP_PORT, VAULT_MCP_TOKEN, VAULT_PATH
-from .frontmatter_index import FrontmatterIndex
+from .config import VAULT_MCP_PORT, VAULT_MCP_HOST, VAULT_MCP_TOKEN, VAULT_PATH, VAULT_ALLOWED_HOSTS
 
 logger = logging.getLogger(__name__)
 
-# Global frontmatter index instance
-frontmatter_index = FrontmatterIndex()
-
-
-@asynccontextmanager
-async def lifespan(server):
-    """Start frontmatter index on server startup, stop on shutdown."""
-    logger.info(f"Starting vault MCP server. Vault: {VAULT_PATH}")
-    frontmatter_index.start()
-    logger.info(f"Frontmatter index built: {frontmatter_index.file_count} files indexed")
-    yield {"frontmatter_index": frontmatter_index}
-    frontmatter_index.stop()
-    logger.info("Vault MCP server shut down.")
-
+# Build allowed hosts list from env
+_allowed_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+_allowed_hosts += [h.strip() for h in VAULT_ALLOWED_HOSTS.split(",") if h.strip()]
 
 # Create the MCP server
 mcp = FastMCP(
     "obsidian_web_mcp",
     stateless_http=True,
     json_response=True,
-    lifespan=lifespan,
     transport_security=TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
-        allowed_hosts=[
-            "127.0.0.1:*",
-            "localhost:*",
-            "[::1]:*",
-            # Add your tunnel hostname here, e.g.:
-            # "vault-mcp.example.com",
-        ],
+        allowed_hosts=_allowed_hosts,
     ),
 )
 
@@ -54,16 +33,14 @@ mcp = FastMCP(
 # --- Register all tools ---
 
 from .tools.read import vault_read as _vault_read, vault_batch_read as _vault_batch_read
-from .tools.write import vault_write as _vault_write, vault_batch_frontmatter_update as _vault_batch_frontmatter_update
-from .tools.search import vault_search as _vault_search, vault_search_frontmatter as _vault_search_frontmatter
+from .tools.write import vault_write as _vault_write
+from .tools.search import vault_search as _vault_search
 from .tools.manage import vault_list as _vault_list, vault_move as _vault_move, vault_delete as _vault_delete
 from .models import (
     VaultReadInput,
     VaultWriteInput,
     VaultBatchReadInput,
-    VaultBatchFrontmatterUpdateInput,
     VaultSearchInput,
-    VaultSearchFrontmatterInput,
     VaultListInput,
     VaultMoveInput,
     VaultDeleteInput,
@@ -72,7 +49,7 @@ from .models import (
 
 @mcp.tool(
     name="vault_read",
-    description="Read a file from the Obsidian vault, returning content, metadata, and parsed YAML frontmatter.",
+    description="Read a file from the Obsidian vault. Returns raw content, file metadata, and parsed YAML frontmatter.",
     annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
 )
 def vault_read(path: str) -> str:
@@ -94,24 +71,13 @@ def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
 
 @mcp.tool(
     name="vault_write",
-    description="Write a file to the Obsidian vault. Supports frontmatter merging with existing files. Creates parent directories by default.",
+    description="Write a file to the Obsidian vault. Content is written exactly as provided — no parsing or reformatting. Creates parent directories by default.",
     annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": False},
 )
-def vault_write(path: str, content: str, create_dirs: bool = True, merge_frontmatter: bool = False) -> str:
+def vault_write(path: str, content: str, create_dirs: bool = True) -> str:
     """Write a file to the vault."""
-    inp = VaultWriteInput(path=path, content=content, create_dirs=create_dirs, merge_frontmatter=merge_frontmatter)
-    return _vault_write(inp.path, inp.content, inp.create_dirs, inp.merge_frontmatter)
-
-
-@mcp.tool(
-    name="vault_batch_frontmatter_update",
-    description="Update YAML frontmatter fields on multiple files without changing body content. Each update merges new fields into existing frontmatter.",
-    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
-)
-def vault_batch_frontmatter_update(updates: list[dict]) -> str:
-    """Batch update frontmatter fields."""
-    inp = VaultBatchFrontmatterUpdateInput(updates=updates)
-    return _vault_batch_frontmatter_update(inp.updates)
+    inp = VaultWriteInput(path=path, content=content, create_dirs=create_dirs)
+    return _vault_write(inp.path, inp.content, inp.create_dirs)
 
 
 @mcp.tool(
@@ -129,23 +95,6 @@ def vault_search(
     """Search vault file contents."""
     inp = VaultSearchInput(query=query, path_prefix=path_prefix, file_pattern=file_pattern, max_results=max_results, context_lines=context_lines)
     return _vault_search(inp.query, inp.path_prefix, inp.file_pattern, inp.max_results, inp.context_lines)
-
-
-@mcp.tool(
-    name="vault_search_frontmatter",
-    description="Search vault files by YAML frontmatter field values. Queries an in-memory index for fast results. Supports exact match, contains, and field-exists queries.",
-    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
-)
-def vault_search_frontmatter(
-    field: str,
-    value: str = "",
-    match_type: str = "exact",
-    path_prefix: str | None = None,
-    max_results: int = 20,
-) -> str:
-    """Search by frontmatter fields."""
-    inp = VaultSearchFrontmatterInput(field=field, value=value, match_type=match_type, path_prefix=path_prefix, max_results=max_results)
-    return _vault_search_frontmatter(inp.field, inp.value, inp.match_type, inp.path_prefix, inp.max_results)
 
 
 @mcp.tool(
@@ -219,7 +168,7 @@ def main():
         import uvicorn
         uvicorn.run(
             app,
-            host="0.0.0.0",
+            host=VAULT_MCP_HOST,
             port=VAULT_MCP_PORT,
             log_level="info",
             proxy_headers=True,
