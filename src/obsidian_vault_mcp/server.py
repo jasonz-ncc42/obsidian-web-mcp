@@ -35,7 +35,7 @@ mcp = FastMCP(
 from .tools.read import vault_read as _vault_read, vault_batch_read as _vault_batch_read, vault_context as _vault_context
 from .tools.write import vault_write as _vault_write, vault_patch as _vault_patch, vault_append as _vault_append
 from .tools.search import vault_search as _vault_search
-from .tools.manage import vault_list as _vault_list, vault_move as _vault_move, vault_delete as _vault_delete
+from .tools.manage import vault_list as _vault_list, vault_tree as _vault_tree, vault_move as _vault_move, vault_delete as _vault_delete
 from .models import (
     VaultReadInput,
     VaultWriteInput,
@@ -146,6 +146,16 @@ def vault_list(
     """List vault directory contents."""
     inp = VaultListInput(path=path, depth=depth, include_files=include_files, include_dirs=include_dirs, pattern=pattern)
     return _vault_list(inp.path, inp.depth, inp.include_files, inp.include_dirs, inp.pattern)
+
+
+@mcp.tool(
+    name="vault_tree",
+    description="Return a compact tree view of the vault directory structure with file counts per folder. Much smaller than vault_list for understanding vault layout. Max depth 10.",
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+)
+def vault_tree(path: str = "", depth: int = 3) -> str:
+    """Get a compact directory tree."""
+    return _vault_tree(path, min(depth, 10))
 
 
 @mcp.tool(
