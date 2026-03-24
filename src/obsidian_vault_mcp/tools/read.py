@@ -4,6 +4,7 @@ import json
 import logging
 import re
 
+from .. import config
 from ..vault import resolve_vault_path, read_file
 
 logger = logging.getLogger(__name__)
@@ -73,3 +74,40 @@ def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
             missing += 1
 
     return json.dumps({"files": results, "found": found, "missing": missing})
+
+
+def vault_context() -> str:
+    """Return all Claude Code context files from the vault: CLAUDE.md and .claude/**/*.md.
+
+    Designed to be called once at session start so Claude Code has full
+    project context without multiple round-trips.
+    """
+    vault_root = config.VAULT_PATH.resolve()
+    files = []
+
+    # Collect CLAUDE.md at vault root
+    claude_md = vault_root / "CLAUDE.md"
+    if claude_md.is_file():
+        files.append(claude_md)
+
+    # Collect all .md files under .claude/
+    claude_dir = vault_root / ".claude"
+    if claude_dir.is_dir():
+        for md_file in sorted(claude_dir.rglob("*.md")):
+            if md_file.is_file():
+                files.append(md_file)
+
+    results = []
+    for fp in files:
+        try:
+            content = fp.read_text(encoding="utf-8")
+            rel_path = str(fp.relative_to(vault_root))
+            results.append({
+                "path": rel_path,
+                "content": content,
+            })
+        except Exception as e:
+            rel_path = str(fp.relative_to(vault_root))
+            results.append({"path": rel_path, "error": str(e)})
+
+    return json.dumps({"files": results, "count": len(results)})

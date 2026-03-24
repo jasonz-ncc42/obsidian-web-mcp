@@ -32,7 +32,7 @@ mcp = FastMCP(
 
 # --- Register all tools ---
 
-from .tools.read import vault_read as _vault_read, vault_batch_read as _vault_batch_read
+from .tools.read import vault_read as _vault_read, vault_batch_read as _vault_batch_read, vault_context as _vault_context
 from .tools.write import vault_write as _vault_write, vault_patch as _vault_patch, vault_append as _vault_append
 from .tools.search import vault_search as _vault_search
 from .tools.manage import vault_list as _vault_list, vault_move as _vault_move, vault_delete as _vault_delete
@@ -69,6 +69,16 @@ def vault_batch_read(paths: list[str], include_content: bool = True) -> str:
     """Read multiple files at once."""
     inp = VaultBatchReadInput(paths=paths, include_content=include_content)
     return _vault_batch_read(inp.paths, inp.include_content)
+
+
+@mcp.tool(
+    name="vault_context",
+    description="Return all Claude Code context files from the vault: CLAUDE.md at the root and all .claude/**/*.md files. Call this once at session start to get full project context in a single request.",
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False},
+)
+def vault_context() -> str:
+    """Get all Claude Code context files."""
+    return _vault_context()
 
 
 @mcp.tool(
