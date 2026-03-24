@@ -36,10 +36,7 @@ def vault_list(
 
 
 def vault_tree(path: str = "", depth: int = 3) -> str:
-    """Return a compact tree view of the vault directory structure.
-
-    Shows directories with file counts, keeping the output small.
-    """
+    """Return a nested JSON tree of the vault directory structure with file counts."""
     try:
         vault_root = config.VAULT_PATH.resolve()
         start = resolve_vault_path(path) if path else vault_root
@@ -47,68 +44,37 @@ def vault_tree(path: str = "", depth: int = 3) -> str:
             return json.dumps({"error": f"Not a directory: {path}"})
 
         depth = min(depth, 10)
-        lines = []
 
-        def _walk(dir_path, prefix, current_depth):
-            if current_depth > depth:
-                return
+        def _build(dir_path, current_depth):
+            node = {"name": dir_path.name, "files": [], "dirs": []}
             try:
-                entries = sorted(dir_path.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+                entries = sorted(dir_path.iterdir(), key=lambda p: p.name.lower())
             except PermissionError:
-                return
+                return node
 
-            dirs = []
-            file_count = 0
             for entry in entries:
                 if entry.name in config.EXCLUDED_DIRS:
                     continue
-                if entry.is_dir():
-                    dirs.append(entry)
-                elif entry.is_file():
-                    file_count += 1
+                if entry.is_file():
+                    node["files"].append(entry.name)
+                elif entry.is_dir():
+                    if current_depth < depth:
+                        node["dirs"].append(_build(entry, current_depth + 1))
+                    else:
+                        # Beyond max depth, just show name and counts
+                        try:
+                            children = list(entry.iterdir())
+                            fc = sum(1 for c in children if c.is_file() and c.name not in config.EXCLUDED_DIRS)
+                            dc = sum(1 for c in children if c.is_dir() and c.name not in config.EXCLUDED_DIRS)
+                        except PermissionError:
+                            fc, dc = 0, 0
+                        node["dirs"].append({"name": entry.name, "file_count": fc, "dir_count": dc})
 
-            # Show file count for this directory
-            if file_count > 0 and current_depth > 0:
-                lines[-1] += f" ({file_count} files)" if lines else ""
+            return node
 
-            for i, d in enumerate(dirs):
-                is_last = (i == len(dirs) - 1) and file_count == 0
-                connector = "└── " if is_last or (i == len(dirs) - 1) else "├── "
-                child_prefix = prefix + ("    " if is_last or (i == len(dirs) - 1) else "│   ")
-
-                # Count files in this subdir
-                sub_files = 0
-                sub_dirs = 0
-                try:
-                    for child in d.iterdir():
-                        if child.name in config.EXCLUDED_DIRS:
-                            continue
-                        if child.is_file():
-                            sub_files += 1
-                        elif child.is_dir():
-                            sub_dirs += 1
-                except PermissionError:
-                    pass
-
-                suffix = ""
-                if sub_files > 0:
-                    suffix = f" ({sub_files} files)"
-
-                lines.append(f"{prefix}{connector}{d.name}/{suffix}")
-
-                if current_depth < depth and sub_dirs > 0:
-                    _walk(d, child_prefix, current_depth + 1)
-
-        root_name = start.name if path else "vault"
-
-        # Count root-level files
-        root_files = sum(1 for f in start.iterdir()
-                         if f.is_file() and f.name not in config.EXCLUDED_DIRS)
-        root_suffix = f" ({root_files} files)" if root_files > 0 else ""
-        lines.append(f"{root_name}/{root_suffix}")
-        _walk(start, "", 0)
-
-        return json.dumps({"tree": "\n".join(lines)})
+        tree = _build(start, 0)
+        tree["path"] = path or "/"
+        return json.dumps(tree)
     except ValueError as e:
         return json.dumps({"error": str(e)})
     except Exception as e:
