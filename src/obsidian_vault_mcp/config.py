@@ -8,6 +8,10 @@ VAULT_MCP_PORT = int(os.environ.get("VAULT_MCP_PORT", "8420"))
 VAULT_MCP_HOST = os.environ.get("VAULT_MCP_HOST", "0.0.0.0")
 VAULT_ALLOWED_HOSTS = os.environ.get("VAULT_ALLOWED_HOSTS", "")
 
+# OAuth 2.0 client credentials (used by Claude desktop/mobile integration)
+VAULT_OAUTH_CLIENT_ID = os.environ.get("VAULT_OAUTH_CLIENT_ID", "vault-mcp-client")
+VAULT_OAUTH_CLIENT_SECRET = os.environ.get("VAULT_OAUTH_CLIENT_SECRET", "")
+
 # Safety limits
 MAX_CONTENT_SIZE = 1_000_000  # 1MB max write size
 MAX_BATCH_SIZE = 20           # Max files per batch operation
