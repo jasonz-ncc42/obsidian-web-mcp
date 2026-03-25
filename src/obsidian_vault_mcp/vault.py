@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import config
+from . import synology
 
 
 def resolve_vault_path(relative_path: str) -> Path:
@@ -97,6 +98,9 @@ def write_file_atomic(
             pass
         raise
 
+    # Notify Synology Drive via FileStation API (if configured)
+    synology.upload_file(relative_path, content, create_parents=create_dirs)
+
     return is_new, len(encoded)
 
 
@@ -121,6 +125,17 @@ def move_path(
         dst.parent.mkdir(parents=True, exist_ok=True)
 
     shutil.move(str(src), str(dst))
+
+    # Notify Synology Drive via FileStation API (if configured)
+    # Read the moved file and upload to new location
+    if dst.is_file():
+        try:
+            content = dst.read_text(encoding="utf-8")
+            synology.upload_file(destination, content, create_parents=True)
+        except Exception:
+            pass  # Best-effort sync
+    synology.delete_file(source)
+
     return True
 
 
@@ -148,6 +163,10 @@ def delete_path(relative_path: str) -> bool:
         dest = trash_dir / f"{path.stem}_{ts}{path.suffix}"
 
     shutil.move(str(path), str(dest))
+
+    # Notify Synology Drive of the deletion (if configured)
+    synology.delete_file(relative_path)
+
     return True
 
 
