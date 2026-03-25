@@ -24,7 +24,7 @@ _SID_TTL = 3600  # Re-authenticate every hour
 
 
 def _base_url() -> str:
-    return f"https://{config.SYNO_HOST}:{config.SYNO_PORT}"
+    return f"{config.SYNO_SCHEME}://{config.SYNO_HOST}:{config.SYNO_PORT}"
 
 
 def _login() -> str:

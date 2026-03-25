@@ -15,7 +15,8 @@ VAULT_OAUTH_CLIENT_SECRET = os.environ.get("VAULT_OAUTH_CLIENT_SECRET", "")
 # Synology FileStation API (optional — enables Drive sync notification on writes)
 # Set all three to enable; if any is empty, falls back to direct disk writes.
 SYNO_HOST = os.environ.get("SYNO_HOST", "")  # e.g., "localhost" or NAS IP
-SYNO_PORT = int(os.environ.get("SYNO_PORT", "5001"))
+SYNO_PORT = int(os.environ.get("SYNO_PORT", "5000"))
+SYNO_SCHEME = os.environ.get("SYNO_SCHEME", "http")
 SYNO_USER = os.environ.get("SYNO_USER", "")
 SYNO_PASS = os.environ.get("SYNO_PASS", "")
 SYNO_VAULT_PATH = os.environ.get("SYNO_VAULT_PATH", "")  # FileStation path, e.g., "/homes/Jason/Drive/..."
